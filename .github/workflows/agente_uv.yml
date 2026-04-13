@@ -1,9 +1,9 @@
 name: Agente UV Diario - Chile
 
 on:
-  # Ejecutar de lunes a viernes a las 10:00 UTC (7:00 AM Chile)
+  # Ejecutar todos los días a las 12:00 UTC (08:00 AM Chile)
   schedule:
-    - cron: '0 10 * * 1-5'
+    - cron: '0 12 * * *'
   # Permitir ejecución manual desde la pestaña Actions
   workflow_dispatch:
 
