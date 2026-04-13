@@ -1,0 +1,43 @@
+name: Agente UV Diario - Chile
+
+on:
+  # Ejecutar de lunes a viernes a las 10:00 UTC (7:00 AM Chile)
+  schedule:
+    - cron: '0 10 * * 1-5'
+  # Permitir ejecución manual desde la pestaña Actions
+  workflow_dispatch:
+
+jobs:
+  run-agente-uv:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout del código
+      uses: actions/checkout@v4
+
+    - name: Configurar Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Instalar dependencias
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Ejecutar agente UV
+      env:
+        GMAIL_USER: ${{ secrets.GMAIL_USER }}
+        GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+        EMAIL_DESTINO: ${{ secrets.EMAIL_DESTINO }}
+      run: |
+        echo "Ejecutando Agente UV..."
+        python agente_uv.py --send
+
+    - name: Upload reporte (opcional)
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: reportes-uv
+        path: reportes/
+        retention-days: 7
