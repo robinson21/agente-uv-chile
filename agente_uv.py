@@ -38,12 +38,20 @@ from config import (
     TIMEZONE,
 )
 
+from meteochile_api import (
+    credenciales_disponibles,
+    obtener_uv_meteochile,
+    obtener_resumen_ema,
+    encontrar_estacion_uv_cercana,
+    encontrar_estacion_ema_cercana,
+)
+
 
 # =============================================================================
 # Consulta de datos climáticos
 # =============================================================================
-def obtener_datos_clima(ciudad: str, lat: float, lon: float) -> dict:
-    """Consulta la API de Open-Meteo para obtener datos de UV y clima."""
+def obtener_datos_open_meteo(ciudad: str, lat: float, lon: float) -> dict:
+    """Consulta la API de Open-Meteo para obtener datos de UV y clima (fallback)."""
     params = {
         "latitude": lat,
         "longitude": lon,
@@ -65,6 +73,9 @@ def obtener_datos_clima(ciudad: str, lat: float, lon: float) -> dict:
             "weather_code": daily.get("weather_code", [None])[0],
             "precip_prob": daily.get("precipitation_probability_max", [None])[0],
             "fecha": daily.get("time", [""])[0],
+            "fuente": "Open-Meteo",
+            "estacion_uv": None,
+            "estacion_ema": None,
             "error": None,
         }
     except requests.RequestException as e:
@@ -75,16 +86,83 @@ def obtener_datos_clima(ciudad: str, lat: float, lon: float) -> dict:
             "weather_code": None,
             "precip_prob": None,
             "fecha": "",
+            "fuente": "Sin datos",
+            "estacion_uv": None,
+            "estacion_ema": None,
             "error": str(e),
         }
 
 
 def obtener_todos_los_datos() -> List[Dict]:
-    """Obtiene datos climáticos para todas las ciudades."""
+    """Obtiene datos climáticos para todas las ciudades.
+
+    Estrategia:
+      1. MeteoChile como fuente principal (UV + EMA)
+      2. Open-Meteo como fallback para datos faltantes
+    """
     resultados = []
+
+    # ── Paso 1: Intentar obtener datos de MeteoChile ──
+    estaciones_uv = None
+    estaciones_ema = None
+
+    if credenciales_disponibles():
+        print("Consultando MeteoChile (DMC)...")
+        estaciones_uv = obtener_uv_meteochile()
+        estaciones_ema = obtener_resumen_ema()
+    else:
+        print("MeteoChile: Sin credenciales. Usando solo Open-Meteo.")
+
+    # ── Paso 2: Para cada ciudad, buscar datos ──
     for ciudad, coords in CIUDADES.items():
-        datos = obtener_datos_clima(ciudad, coords["lat"], coords["lon"])
+        lat = coords["lat"]
+        lon = coords["lon"]
+
+        uv_meteochile = None
+        temp_meteochile = None
+        nombre_estacion_uv = None
+        nombre_estacion_ema = None
+        fuente_uv = "Open-Meteo"
+        fuente_temp = "Open-Meteo"
+
+        # Buscar estación UV cercana en MeteoChile
+        if estaciones_uv:
+            estacion_uv = encontrar_estacion_uv_cercana(lat, lon, estaciones_uv)
+            if estacion_uv:
+                uv_meteochile = estacion_uv["uv_max_hoy"]
+                nombre_estacion_uv = estacion_uv["nombre_estacion"]
+                fuente_uv = "MeteoChile DMC"
+
+        # Buscar estación EMA cercana en MeteoChile
+        if estaciones_ema:
+            resultado_ema = encontrar_estacion_ema_cercana(lat, lon, estaciones_ema)
+            if resultado_ema:
+                codigo_ema, datos_ema = resultado_ema
+                temp_meteochile = datos_ema.get("temp_max")
+                nombre_estacion_ema = datos_ema.get("nombre")
+                fuente_temp = "MeteoChile DMC"
+
+        # Siempre consultar Open-Meteo para weather_code y precip
+        # (MeteoChile no provee pronóstico de precipitación ni código WMO)
+        datos_om = obtener_datos_open_meteo(ciudad, lat, lon)
+
+        # Construir resultado combinando MeteoChile + Open-Meteo
+        datos = {
+            "ciudad": ciudad,
+            "uv_max": uv_meteochile if uv_meteochile is not None else datos_om["uv_max"],
+            "temp_max": temp_meteochile if temp_meteochile is not None else datos_om["temp_max"],
+            "weather_code": datos_om["weather_code"],
+            "precip_prob": datos_om["precip_prob"],
+            "fecha": datos_om["fecha"],
+            "fuente_uv": fuente_uv,
+            "fuente_temp": fuente_temp,
+            "estacion_uv": nombre_estacion_uv,
+            "estacion_ema": nombre_estacion_ema,
+            "error": datos_om["error"],
+        }
+
         resultados.append(datos)
+
     return resultados
 
 
@@ -293,6 +371,7 @@ def generar_reporte_html(datos_ciudades: List[Dict]) -> str:
 <div class="header">
     <h1>Reporte Diario: Radiación UV y Alertas Climáticas</h1>
     <p>Fecha: {hoy} | Generado a las: {hora} | Zona: Chile continental</p>
+    <p style="font-size:12px;opacity:0.85;">Fuente principal: Dirección Meteorológica de Chile (MeteoChile) | Respaldo: Open-Meteo</p>
 </div>
 """
 
@@ -308,6 +387,7 @@ def generar_reporte_html(datos_ciudades: List[Dict]) -> str:
             <th>Temp. Máx</th>
             <th>Clima</th>
             <th>Precip. %</th>
+            <th>Fuente UV</th>
         </tr>
 """
 
@@ -321,6 +401,10 @@ def generar_reporte_html(datos_ciudades: List[Dict]) -> str:
         uv_display = f"{uv:.1f}" if uv is not None else "Sin dato"
         temp_display = f"{temp:.0f}°C" if temp is not None else "Sin dato"
 
+        fuente_uv = datos.get("fuente_uv", "Open-Meteo")
+        fuente_tag = "DMC" if "MeteoChile" in fuente_uv else "OM"
+        fuente_color = "#1a237e" if "MeteoChile" in fuente_uv else "#757575"
+
         html += f"""        <tr>
             <td><strong>{datos['ciudad']}</strong></td>
             <td>{uv_display}</td>
@@ -328,6 +412,7 @@ def generar_reporte_html(datos_ciudades: List[Dict]) -> str:
             <td>{temp_display}</td>
             <td>{clima}</td>
             <td>{precip}</td>
+            <td><span style="background:{fuente_color};color:white;padding:2px 6px;border-radius:8px;font-size:11px;">{fuente_tag}</span></td>
         </tr>
 """
 
@@ -381,7 +466,8 @@ def generar_reporte_html(datos_ciudades: List[Dict]) -> str:
     # ── Pie de página ──
     html += f"""
 <div class="footer">
-    <p>Reporte generado automáticamente | Datos: Open-Meteo API | Clasificación UV: OMS</p>
+    <p>Reporte generado automáticamente | Fuente primaria: <strong>Dirección Meteorológica de Chile (DMC)</strong> | Respaldo: Open-Meteo API | Clasificación UV: OMS</p>
+    <p><strong>DMC</strong> = MeteoChile (datos oficiales) | <strong>OM</strong> = Open-Meteo (pronóstico)</p>
     <p>Este reporte es informativo. En caso de condiciones extremas, siga los protocolos de emergencia de su empresa.</p>
 </div>
 </body>
@@ -432,7 +518,7 @@ def generar_reporte_texto(datos_ciudades: List[Dict]) -> str:
         lineas.append(f"• {datos['ciudad']} ({cat['nivel']}): {cat['recomendacion']}")
 
     lineas.append("")
-    lineas.append("Reporte generado automáticamente | Datos: Open-Meteo | Clasificación UV: OMS")
+    lineas.append("Reporte generado automáticamente | Fuente primaria: MeteoChile DMC | Respaldo: Open-Meteo | Clasificación UV: OMS")
 
     return "\n".join(lineas)
 
@@ -489,6 +575,11 @@ def main():
     print("=" * 60)
     print(f"Fecha: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
     print(f"Ciudades: {', '.join(CIUDADES.keys())}")
+    if credenciales_disponibles():
+        print(f"Fuente principal: MeteoChile DMC (Dirección Meteorológica de Chile)")
+        print(f"Fallback: Open-Meteo API")
+    else:
+        print(f"Fuente: Open-Meteo API (MeteoChile sin credenciales)")
     print()
 
     # Obtener datos climáticos
@@ -507,11 +598,13 @@ def main():
         cat = clasificar_uv(uv)
         temp = d["temp_max"]
         clima = WEATHER_CODES.get(d["weather_code"], "Sin dato")
+        fuente = d.get("fuente_uv", "Open-Meteo")
+        fuente_short = "DMC" if "MeteoChile" in fuente else "OM"
 
         uv_display = f"{uv:.1f}" if uv is not None else "N/D"
         temp_display = f"{temp:.0f}°C" if temp is not None else "N/D"
 
-        print(f"  {d['ciudad']:15s} | UV: {uv_display:5s} ({cat['nivel']:10s}) | {temp_display:6s} | {clima}")
+        print(f"  {d['ciudad']:15s} | UV: {uv_display:5s} ({cat['nivel']:10s}) | {temp_display:6s} | {clima} [{fuente_short}]")
 
         alertas = detectar_alertas(d)
         for alerta in alertas:

@@ -97,7 +97,24 @@ EMAIL_DESTINO = os.environ.get("EMAIL_DESTINO", "robinson.armijo@esmax.cl")
 EMAIL_ASUNTO = "Reporte Diario - Radiación UV y Alertas Climáticas | {fecha}"
 
 # =============================================================================
-# Configuración API Open-Meteo
+# Configuración API MeteoChile (Dirección Meteorológica de Chile)
+# =============================================================================
+# Obtener credenciales en: https://climatologia.meteochile.gob.cl
+# Registrarse → Iniciar Sesión → Obtener token de API
+METEOCHILE_USER = os.environ.get("METEOCHILE_USER", "")
+METEOCHILE_TOKEN = os.environ.get("METEOCHILE_TOKEN", "")
+
+# Endpoints de las APIs de MeteoChile
+METEOCHILE_UV_URL = (
+    "https://climatologia.meteochile.gob.cl/application/servicios/getRecienteUvb"
+)
+METEOCHILE_EMA_URL = (
+    "https://climatologia.meteochile.gob.cl/application/servicios/getEmaResumenDiario"
+)
+METEOCHILE_TIMEOUT = 30  # segundos
+
+# =============================================================================
+# Configuración API Open-Meteo (fallback)
 # =============================================================================
 OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
 OPEN_METEO_PARAMS = [

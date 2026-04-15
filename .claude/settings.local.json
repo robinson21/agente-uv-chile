@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python3 agente_uv.py --test)"
+      "Bash(python3 agente_uv.py --test)",
+      "Bash(GMAIL_USER=robinson.armijo@gmail.com GMAIL_APP_PASSWORD=\"wpbl ifxp gsrr aofv\" EMAIL_DESTINO=robinson.armijo@esmax.cl python3 agente_uv.py --send)"
     ]
   }
 }

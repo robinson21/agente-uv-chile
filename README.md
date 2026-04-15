@@ -1,6 +1,6 @@
 # Agente UV y Alertas Climáticas - Chile
 
-Agente automatizado que consulta diariamente la radiación UV y condiciones climáticas para 8 ciudades chilenas, genera recomendaciones de Seguridad y Salud Ocupacional (SST/ESST), detecta alertas de calor extremo y condiciones adversas, y envía un reporte por correo electrónico.
+Agente automatizado que consulta diariamente la radiación UV y condiciones climáticas para 8 ciudades chilenas desde la **Dirección Meteorológica de Chile (MeteoChile)**, genera recomendaciones de Seguridad y Salud Ocupacional (SST/ESST), detecta alertas de calor extremo y condiciones adversas, y envía un reporte por correo electrónico.
 
 ## Ciudades monitoreadas
 
@@ -15,6 +15,8 @@ Agente automatizado que consulta diariamente la radiación UV y condiciones clim
 
 ## Características
 
+- **Fuente oficial**: Datos de radiación UV y temperatura desde MeteoChile (DMC)
+- **Fallback automático**: Si MeteoChile no tiene estación cercana, usa Open-Meteo
 - **Índice UV**: Clasificación según estándares OMS con recomendaciones SST
 - **Alertas automáticas**:
   - Calor extremo (≥ 33°C)
@@ -28,6 +30,7 @@ Agente automatizado que consulta diariamente la radiación UV y condiciones clim
 
 - Python 3.9+
 - Cuenta de Gmail con contraseña de aplicación
+- Credenciales de MeteoChile (opcional pero recomendado)
 - GitHub (para ejecución automática)
 
 ## Configuración en GitHub
@@ -48,13 +51,15 @@ git push -u origin main
 1. Ve a tu repositorio en GitHub
 2. Clic en **Settings** → **Secrets and variables** → **Actions**
 3. Clic en **New repository secret**
-4. Agrega estos 3 secrets:
+4. Agrega estos 5 secrets:
 
 | Nombre | Valor |
 |--------|-------|
 | `GMAIL_USER` | Tu correo Gmail (ej: `tu_correo@gmail.com`) |
 | `GMAIL_APP_PASSWORD` | Contraseña de aplicación de 16 caracteres |
 | `EMAIL_DESTINO` | Correo destino (ej: `robinson.armijo@esmax.cl`) |
+| `METEOCHILE_USER` | Tu correo registrado en MeteoChile |
+| `METEOCHILE_TOKEN` | Tu token API de MeteoChile |
 
 ### Paso 3: Verificar GitHub Actions
 
@@ -103,11 +108,21 @@ python3 agente_uv.py --send
 python3 agente_uv.py
 ```
 
+## Cómo obtener credenciales de MeteoChile
+
+1. Ve a https://climatologia.meteochile.gob.cl
+2. Clic en **Iniciar Sesión** y crea una cuenta
+3. Una vez dentro, obtén tu **token de API** desde la sección de Web Services
+4. Usa tu correo como `METEOCHILE_USER` y el token como `METEOCHILE_TOKEN`
+
+**Nota**: Sin credenciales de MeteoChile, el agente funciona normalmente usando Open-Meteo como fuente de datos.
+
 ## Estructura del proyecto
 
 ```
 agente-uv-chile/
 ├── agente_uv.py              # Script principal
+├── meteochile_api.py         # Módulo de consulta APIs MeteoChile (DMC)
 ├── config.py                 # Configuración (ciudades, umbrales, etc.)
 ├── requirements.txt          # Dependencias Python
 ├── .env.example              # Ejemplo de variables de entorno
@@ -120,9 +135,20 @@ agente-uv-chile/
 
 ## Fuente de datos
 
+### Fuente principal: MeteoChile (DMC)
+- **Organismo**: Dirección Meteorológica de Chile
+- **Portal**: https://climatologia.meteochile.gob.cl
+- **APIs usadas**:
+  - `getRecienteUvb` — Índice UV cada 5 min, red nacional
+  - `getEmaResumenDiario` — Temperatura, precipitación, viento de estaciones automáticas
+- **Licencia**: Datos públicos (citar a la DMC como fuente)
+- **Requiere**: Registro gratuito + token API
+
+### Fallback: Open-Meteo
 - **API**: Open-Meteo (https://open-meteo.com/)
 - **Licencia**: Gratuita, sin API key requerida
 - **Datos**: Índice UV, temperatura máxima, código climático, probabilidad de precipitación
+- **Uso**: Se usa cuando MeteoChile no tiene estación cercana o no hay credenciales
 
 ## Clasificación UV (OMS)
 
